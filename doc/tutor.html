@@ -4,6 +4,45 @@
   <meta charset="UTF-8">
   <meta name="viewport" content="width=device-width, initial-scale=1.0">
   <title>Tutor</title>
+  <style>
+    body {
+      font-family: Arial, sans-serif;
+      margin: 20px;
+      padding: 0;
+    }
+    h1 {
+      color: #333;
+    }
+    #chat-box {
+      border: 1px solid #ccc;
+      padding: 15px;
+      margin-top: 20px;
+      height: 300px;
+      overflow-y: scroll;
+      background-color: #f9f9f9;
+    }
+    #chat-messages p {
+      margin: 5px 0;
+    }
+    #message-input {
+      width: 80%;
+      padding: 10px;
+      margin-top: 10px;
+      border: 1px solid #ccc;
+      border-radius: 5px;
+    }
+    button {
+      padding: 10px 15px;
+      background-color: #007BFF;
+      color: white;
+      border: none;
+      border-radius: 5px;
+      cursor: pointer;
+    }
+    button:hover {
+      background-color: #0056b3;
+    }
+  </style>
 </head>
 <body>
   <h1 id="tutor-heading">Tutor</h1>
@@ -19,18 +58,20 @@
   </form>
 
   <script>
+    
     const urlParams = new URLSearchParams(window.location.search);
     const topic = urlParams.get('topic');
 
+   
     document.getElementById('tutor-heading').textContent = `${topic} Tutor`;
 
     document.getElementById('chat-form').addEventListener('submit', async (event) => {
       event.preventDefault();
 
-      const question = document.getElementById('message-input').value;
+      let question = document.getElementById('message-input').value.trim();
       const chatMessages = document.getElementById('chat-messages');
 
-     
+      
       const userMessage = document.createElement('p');
       userMessage.innerHTML = `<strong>You:</strong> ${question}`;
       chatMessages.appendChild(userMessage);
@@ -39,18 +80,28 @@
       document.getElementById('message-input').value = '';
 
       
-      const response = await fetch('/api/chat', {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ question, topic })
-      });
+      try {
+        const response = await fetch('/api/chat', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ question, topic })
+        });
 
-      const data = await response.json();
+        const data = await response.json();
 
-      
-      const tutorMessage = document.createElement('p');
-      tutorMessage.innerHTML = `<strong>${topic} Tutor:</strong> ${data.answer}`;
-      chatMessages.appendChild(tutorMessage);
+        
+        const tutorMessage = document.createElement('p');
+        tutorMessage.innerHTML = `<strong>${topic} Tutor:</strong> ${data.answer}`;
+        chatMessages.appendChild(tutorMessage);
+
+        
+        chatMessages.parentNode.scrollTop = chatMessages.parentNode.scrollHeight;
+      } catch (error) {
+        console.error('Error:', error);
+        const errorMessage = document.createElement('p');
+        errorMessage.innerHTML = `<strong>Error:</strong> Unable to fetch the answer. Please try again.`;
+        chatMessages.appendChild(errorMessage);
+      }
     });
   </script>
 </body>
