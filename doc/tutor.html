@@ -1,0 +1,51 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Tutor</title>
+</head>
+<body>
+  <h1 id="tutor-heading">Tutor</h1>
+  <p>Welcome to your tutor session for the selected course.</p>
+
+  <div id="chat-box">
+    <p><strong>Tutor:</strong> Based on your most recent assignment, we should go over important topics!</p>
+    <div id="chat-messages"></div>
+  </div>
+
+  <form id="chat-form">
+    <input type="text" id="message-input" placeholder="Type your message..." required>
+    <button type="submit">Send</button>
+  </form>
+
+  <script>
+    
+    const urlParams = new URLSearchParams(window.location.search);
+    const topic = urlParams.get('topic');
+
+    
+    document.getElementById('tutor-heading').textContent = `${topic} Tutor`;
+
+    
+    document.getElementById('chat-form').addEventListener('submit', function(event) {
+      event.preventDefault();
+      const userMessage = document.getElementById('message-input').value;
+      const chatMessages = document.getElementById('chat-messages');
+
+      
+      const userMessageElement = document.createElement('p');
+      userMessageElement.innerHTML = `<strong>You:</strong> ${userMessage}`;
+      chatMessages.appendChild(userMessageElement);
+
+     
+      document.getElementById('message-input').value = '';
+
+      
+      const tutorMessageElement = document.createElement('p');
+      tutorMessageElement.innerHTML = `<strong>${topic} Tutor:</strong> Let's dive deeper into this topic!`;
+      chatMessages.appendChild(tutorMessageElement);
+    });
+  </script>
+</body>
+</html>
