@@ -104,6 +104,23 @@ app.get('/tutor', (req: Request, res: Response) => {
   res.sendFile(path.join(__dirname, 'tutor.html'));
 });
 
+
+app.post('/api/chat', (req: Request, res: Response) => {
+  const { question, topic } = req.body;
+
+  const query = 'SELECT Answer FROM Problems WHERE Question = ? AND Topic = ?';
+  db.query(query, [question, topic], (err, results) => {
+    if (err) {
+      console.error('Error querying Problems table:', err);
+      res.status(500).json({ error: 'Database error' });
+    } else if (results.length > 0) {
+      res.json({ answer: results[0].Answer });
+    } else {
+      res.json({ answer: "I'm sorry, I don't have an answer to that question." });
+    }
+  });
+});
+
 app.listen(PORT, () => {
   console.log(`Server is running on http://localhost:${PORT}`);
 });
