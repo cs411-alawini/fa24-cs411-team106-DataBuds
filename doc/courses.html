@@ -1,0 +1,30 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Select Course</title>
+</head>
+<body>
+  <h2>Select a Course to Register</h2>
+  <ul id="courses-list"></ul>
+  <form action="/api/register-course" method="POST">
+    <label for="courseId">Enter Course ID to Register:</label>
+    <input type="number" id="courseId" name="courseId" required>
+    <button type="submit">Register</button>
+  </form>
+  <script>
+    // Fetch and display the list of available courses
+    fetch('/api/courses')
+      .then(response => response.json())
+      .then(data => {
+        const coursesList = document.getElementById('courses-list');
+        data.courses.forEach(course => {
+          const listItem = document.createElement('li');
+          listItem.textContent = `Course ID: ${course.CourseId}, Topic: ${course.Topic}`;
+          coursesList.appendChild(listItem);
+        });
+      });
+  </script>
+</body>
+</html>
