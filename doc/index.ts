@@ -26,6 +26,16 @@ app.use(express.urlencoded({ extended: true }));
 app.use(cookieParser()); 
 
 
+app.get('/login', (req: Request, res: Response) => {
+  res.sendFile(path.join(__dirname, 'login.html'));
+});
+
+
+app.get('/signup', (req: Request, res: Response) => {
+  res.sendFile(path.join(__dirname, 'signup.html'));
+});
+
+
 app.post('/api/login', (req: Request, res: Response) => {
   const { username, password } = req.body;
   const query = 'SELECT UserId FROM User WHERE username = ? AND password = ?';
@@ -45,8 +55,33 @@ app.post('/api/login', (req: Request, res: Response) => {
 });
 
 
-app.get('/login', (req: Request, res: Response) => {
-  res.sendFile(path.join(__dirname, 'login.html'));
+app.post('/api/signup', (req: Request, res: Response) => {
+  const { username, password } = req.body;
+
+
+  const checkQuery = 'SELECT * FROM User WHERE username = ?';
+  db.query(checkQuery, [username], (err, results) => {
+    if (err) {
+      console.error('Error querying the database:', err);
+      res.status(500).json({ error: 'Database error' });
+      return;
+    }
+
+    if (results.length > 0) {
+      res.status(400).json({ message: 'Username already taken' });
+    } else {
+      
+      const insertQuery = 'INSERT INTO User (username, password) VALUES (?, ?)';
+      db.query(insertQuery, [username, password], (err) => {
+        if (err) {
+          console.error('Error inserting into the database:', err);
+          res.status(500).json({ error: 'Database error' });
+        } else {
+          res.redirect('/login');
+        }
+      });
+    }
+  });
 });
 
 
@@ -106,9 +141,19 @@ app.get('/tutor', (req: Request, res: Response) => {
 
 
 app.post('/api/chat', (req: Request, res: Response) => {
-  const { question, topic } = req.body;
+  let { question, topic } = req.body;
 
-  const query = 'SELECT Answer FROM Problems WHERE Question = ? AND Topic = ?';
+  question = question.trim();
+  if (!question.endsWith('?')) {
+    question += '?';
+  }
+
+  const query = `
+    SELECT Answer 
+    FROM Problems 
+    WHERE LOWER(Question) = LOWER(?) AND Topic = ?
+  `;
+
   db.query(query, [question, topic], (err, results) => {
     if (err) {
       console.error('Error querying Problems table:', err);
