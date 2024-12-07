@@ -1,15 +1,17 @@
+import 'dotenv/config';
 import express, { Request, Response } from 'express';
 import mysql from 'mysql';
 import cookieParser from 'cookie-parser'; 
 import path from 'path';
+import { GoogleGenerativeAI } from "@google/generative-ai";
 
 const app = express();
 const PORT = 3007;
 
 const db = mysql.createConnection({
-  socketPath: '/cloudsql/my-project-1524331659983:us-central1:aitutor',
-  user: 'root', 
-  password: '123', 
+  socketPath: './cloudsql/my-project-1524331659983:us-central1:aitutor',
+  user: 'root',
+  password: '123',
   database: 'aitutor'
 });
 
@@ -25,6 +27,7 @@ app.use(express.json());
 app.use(express.urlencoded({ extended: true }));
 app.use(cookieParser()); 
 
+const genAI = new GoogleGenerativeAI(process.env.GEMINI_API_KEY || '');
 
 app.get('/login', (req: Request, res: Response) => {
   res.sendFile(path.join(__dirname, 'login.html'));
@@ -140,32 +143,72 @@ app.get('/tutor', (req: Request, res: Response) => {
 });
 
 
-app.post('/api/chat', (req: Request, res: Response) => {
-  let { question, topic } = req.body;
-
-  question = question.trim();
-  if (!question.endsWith('?')) {
-    question += '?';
-  }
-
+app.post('/api/chat/question', (req: Request, res: Response) => {
+  const { topic } = req.body;
+  
   const query = `
-    SELECT Answer 
+    SELECT Question, Answer 
     FROM Problems 
-    WHERE LOWER(Question) = LOWER(?) AND Topic = ?
+    WHERE Topic = ? 
+    ORDER BY RAND() 
+    LIMIT 1
   `;
 
-  db.query(query, [question, topic], (err, results) => {
+  db.query(query, [topic], (err, results) => {
     if (err) {
       console.error('Error querying Problems table:', err);
       res.status(500).json({ error: 'Database error' });
     } else if (results.length > 0) {
-      res.json({ answer: results[0].Answer });
+      // Store the answer in the session/cookie for later comparison
+      res.cookie('currentAnswer', results[0].Answer);
+      res.json({ 
+        question: results[0].Question,
+        context: `You are learning about ${topic}. Please answer the following question:`
+      });
     } else {
-      res.json({ answer: "I'm sorry, I don't have an answer to that question." });
+      res.status(404).json({ error: 'No questions found for this topic' });
     }
   });
 });
 
-app.listen(PORT, () => {
-  console.log(`Server is running on http://localhost:${PORT}`);
+
+app.post('/api/chat', (req: Request, res: Response, next) => {
+  (async () => {
+    try {
+      const { userAnswer } = req.body;
+      const correctAnswer = req.cookies.currentAnswer;
+
+      if (!correctAnswer) {
+        return res.status(400).json({ error: 'No active question found' });
+      }
+
+      const feedback = await generateFeedback(userAnswer, correctAnswer);
+      res.json({ feedback, correctAnswer });
+    } catch (error) {
+      next(error);
+    }
+  })();
 });
+
+async function generateFeedback(userAnswer: string, correctAnswer: string): Promise<string> {
+  const model = genAI.getGenerativeModel({ model: "gemini-pro" });
+  
+  const prompt = `
+    Compare the following student answer to the correct answer and provide constructive feedback:
+    
+    Student's Answer: "${userAnswer}"
+    Correct Answer: "${correctAnswer}"
+    
+    Provide feedback that:
+    1. Acknowledges what the student did well
+    2. Points out any misconceptions or errors
+    3. Explains the correct approach if needed
+    Keep the tone encouraging and constructive.
+  `;
+
+  const result = await model.generateContent(prompt);
+  const response = await result.response;
+  return response.text();
+}
+
+app.listen(PORT, () => console.log(`Server running on port ${PORT}`));

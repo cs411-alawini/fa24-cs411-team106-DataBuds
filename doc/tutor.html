@@ -53,53 +53,77 @@
   </div>
 
   <form id="chat-form">
-    <input type="text" id="message-input" placeholder="Type your question..." required>
+    <input type="text" id="message-input" placeholder="Type your answer..." required>
     <button type="submit">Send</button>
   </form>
 
   <script>
-    
     const urlParams = new URLSearchParams(window.location.search);
     const topic = urlParams.get('topic');
-
-   
+    
     document.getElementById('tutor-heading').textContent = `${topic} Tutor`;
-
-    document.getElementById('chat-form').addEventListener('submit', async (event) => {
-      event.preventDefault();
-
-      let question = document.getElementById('message-input').value.trim();
-      const chatMessages = document.getElementById('chat-messages');
-
-      
-      const userMessage = document.createElement('p');
-      userMessage.innerHTML = `<strong>You:</strong> ${question}`;
-      chatMessages.appendChild(userMessage);
-
-      
-      document.getElementById('message-input').value = '';
-
-      
+    
+    async function requestNewQuestion() {
       try {
-        const response = await fetch('/api/chat', {
+        const response = await fetch('/api/chat/question', {
           method: 'POST',
           headers: { 'Content-Type': 'application/json' },
-          body: JSON.stringify({ question, topic })
+          body: JSON.stringify({ topic })
         });
-
+        
         const data = await response.json();
-
+        const chatMessages = document.getElementById('chat-messages');
         
         const tutorMessage = document.createElement('p');
-        tutorMessage.innerHTML = `<strong>${topic} Tutor:</strong> ${data.answer}`;
+        tutorMessage.innerHTML = `<strong>${topic} Tutor:</strong> ${data.context}<br>${data.question}`;
         chatMessages.appendChild(tutorMessage);
-
         
         chatMessages.parentNode.scrollTop = chatMessages.parentNode.scrollHeight;
       } catch (error) {
         console.error('Error:', error);
         const errorMessage = document.createElement('p');
-        errorMessage.innerHTML = `<strong>Error:</strong> Unable to fetch the answer. Please try again.`;
+        errorMessage.innerHTML = `<strong>Error:</strong> Unable to fetch a question. Please try again.`;
+        chatMessages.appendChild(errorMessage);
+      }
+    }
+
+    requestNewQuestion();
+
+    document.getElementById('chat-form').addEventListener('submit', async (event) => {
+      event.preventDefault();
+
+      const userAnswer = document.getElementById('message-input').value.trim();
+      const chatMessages = document.getElementById('chat-messages');
+
+      const userMessage = document.createElement('p');
+      userMessage.innerHTML = `<strong>You:</strong> ${userAnswer}`;
+      chatMessages.appendChild(userMessage);
+
+      document.getElementById('message-input').value = '';
+
+      try {
+        const response = await fetch('/api/chat', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ userAnswer })
+        });
+
+        const data = await response.json();
+
+        const feedbackMessage = document.createElement('p');
+        feedbackMessage.innerHTML = `<strong>${topic} Tutor:</strong> ${data.feedback}<br><br>
+          <strong>Correct Answer:</strong> ${data.correctAnswer}`;
+        chatMessages.appendChild(feedbackMessage);
+
+        setTimeout(() => {
+          requestNewQuestion();
+        }, 3000);
+
+        chatMessages.parentNode.scrollTop = chatMessages.parentNode.scrollHeight;
+      } catch (error) {
+        console.error('Error:', error);
+        const errorMessage = document.createElement('p');
+        errorMessage.innerHTML = `<strong>Error:</strong> Unable to get feedback. Please try again.`;
         chatMessages.appendChild(errorMessage);
       }
     });
