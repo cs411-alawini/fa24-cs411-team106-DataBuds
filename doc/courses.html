@@ -7,24 +7,94 @@
 </head>
 <body>
   <h2>Select a Course to Register</h2>
+
+  <!-- Search bar -->
+  <form id="search-form">
+    <input type="text" id="search-input" placeholder="Search by course name" required>
+    <button type="submit">Search</button>
+  </form>
+
+  <h3>Courses</h3>
   <ul id="courses-list"></ul>
+
+  <h3>Top 15 Popular Courses</h3>
+  <ul id="enrollment-stats"></ul>
+
+  <!-- Average Course Difficulty Section -->
+  <h3>Average Course Difficulty</h3>
+  <div id="avg-difficulty"></div>
+
   <form action="/api/register-course" method="POST">
     <label for="courseId">Enter Course ID to Register:</label>
     <input type="number" id="courseId" name="courseId" required>
     <button type="submit">Register</button>
   </form>
+
   <script>
-    // Fetch and display the list of available courses
-    fetch('/api/courses')
-      .then(response => response.json())
-      .then(data => {
-        const coursesList = document.getElementById('courses-list');
-        data.courses.forEach(course => {
-          const listItem = document.createElement('li');
-          listItem.textContent = `Course ID: ${course.CourseId}, Topic: ${course.Topic}`;
-          coursesList.appendChild(listItem);
+    function fetchCourses(query = '') {
+      const url = query ? `/api/search-courses?keyword=${query}` : '/api/courses';
+
+      fetch(url)
+        .then(response => response.json())
+        .then(data => {
+          const coursesList = document.getElementById('courses-list');
+          coursesList.innerHTML = '';
+          data.courses.forEach(course => {
+            const listItem = document.createElement('li');
+            listItem.textContent = `Course ID: ${course.CourseId}, Topic: ${course.Topic}`;
+            coursesList.appendChild(listItem);
+          });
         });
-      });
+    }
+
+    function fetchCourseEnrollmentStats() {
+      fetch('/api/course-enrollment-stats')
+        .then(response => response.json())
+        .then(data => {
+          const enrollmentStats = document.getElementById('enrollment-stats');
+          enrollmentStats.innerHTML = '';
+          data.courseStats.forEach(course => {
+            const listItem = document.createElement('li');
+            listItem.textContent = `Course ID: ${course.CourseId}, Topic: ${course.Topic}, Enrolled Users: ${course.enrolledUsersCount}`;
+            enrollmentStats.appendChild(listItem);
+          });
+        });
+    }
+
+  
+    function fetchAvgDifficulty() {
+      fetch('/api/avg-difficulty')
+        .then(response => response.json())
+        .then(data => {
+          const avgDifficultyElement = document.getElementById('avg-difficulty');
+          avgDifficultyElement.innerHTML = '';
+          
+          if (data.avgDifficulty && data.avgDifficulty.length > 0) {
+            data.avgDifficulty.forEach(course => {
+              const listItem = document.createElement('div');
+              listItem.textContent = `Topic: ${course.Topic}, Average Difficulty: ${course.AvgDifficulty}`;
+              avgDifficultyElement.appendChild(listItem);
+            });
+          } else {
+            avgDifficultyElement.textContent = 'No difficulty data available';
+          }
+        })
+        .catch(err => {
+          console.error('Error fetching average difficulty:', err);
+        });
+    }
+
+
+    fetchCourses();
+    fetchCourseEnrollmentStats();
+    fetchAvgDifficulty();
+
+   
+    document.getElementById('search-form').addEventListener('submit', function(event) {
+      event.preventDefault();
+      const query = document.getElementById('search-input').value;
+      fetchCourses(query);  
+    });
   </script>
 </body>
 </html>
