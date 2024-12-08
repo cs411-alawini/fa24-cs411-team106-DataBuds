@@ -1,0 +1,86 @@
+Stored Procedures: 
+
+DELIMITER //
+
+CREATE PROCEDURE CourseEnrollmentStatistics()
+BEGIN
+    DECLARE totalEnrollments INT;
+    DECLARE maxCourses INT;
+
+
+    SELECT COUNT(*) INTO totalEnrollments FROM User;
+
+    IF totalEnrollments > 100 THEN
+        SET maxCourses = 15;
+    ELSE
+        SET maxCourses = 5;
+    END IF;
+
+  
+
+    SELECT c.CourseId, c.Topic, Count(u.UserId) AS enrolledUsersCount
+    FROM Courses c NATURAL JOIN User u
+    GROUP BY c.CourseId ORDER BY enrolledUsersCount DESC
+    LIMIT maxCourses;
+
+END//
+
+DELIMITER ;
+
+
+-----------------------------------------------------------------
+
+DELIMITER //
+
+CREATE PROCEDURE GetAvgDifficulty()
+BEGIN
+   
+    DECLARE topic_count INT;
+
+ 
+    SELECT Count(Distinct C.Topic) INTO topic_count FROM Courses C Natural Join Problems P;
+
+    IF topic_count > 0 THEN
+        SELECT C.Topic, AVG(P.Difficulty) AS AvgDifficulty
+        FROM Courses C Natural Join Problems P
+        Group BY C.Topic Order By AvgDifficulty Desc;
+    END IF;
+END //
+
+DELIMITER ;
+
+---------------------------------------------------------------------------
+Constraints: 
+
+CREATE TABLE User (
+    UserId INT  PRIMARY KEY,
+    username VARCHAR(50) NOT NULL,
+    password VARCHAR(50) NOT NULL
+    CourseId INT,
+    FOREIGN KEY (CourseId) REFERENCES Courses(CourseId)
+);
+
+CREATE TABLE Courses (
+    CourseId INT PRIMARY KEY,
+    Topic VARCHAR(100) NOT NULL
+);
+
+CREATE TABLE Tutor (
+    TutorId INT PRIMARY KEY,
+    Topic VARCHAR(100) NOT NULL
+);
+
+CREATE TABLE Problems (
+    ProblemId INT PRIMARY KEY,
+    Questions VARCHAR(250) PRIMARY KEY,
+    Answer VARCHAR(250) NOT NULL,
+    Difficulty INT,
+    Topic VARCHAR(100) NOT NULL
+);
+
+CREATE TABLE Info (
+    InfoID INT PRIMARY KEY ,
+    Topic varchar(100) NOT NULL,
+    WebURL varchar(250),
+    ResourceType varchar(50)
+);
