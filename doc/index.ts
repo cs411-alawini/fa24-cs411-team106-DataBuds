@@ -408,5 +408,182 @@ app.get('/api/resources/:topic', (req: Request, res: Response) => {
   });
 });
 
+app.post('/api/assign-tutor', (req: Request, res: Response) => {
+  const userId = req.cookies.userId;
+  
+  db.beginTransaction((err) => {
+    if (err) {
+      console.error('Error starting transaction:', err);
+      return res.status(500).json({ error: 'Transaction error' });
+    }
+
+    const query = `
+      UPDATE Tutor
+      SET CurrentUserId = ?
+      WHERE TutorId = (
+        SELECT TutorId FROM (
+          SELECT T.TutorId
+          FROM Tutor T
+          JOIN Courses C ON T.Topic = C.Topic
+          JOIN User U ON U.CourseId = C.CourseId
+          WHERE U.UserId = ? 
+          AND T.CurrentUserId IS NULL
+          LIMIT 1
+        ) AS SubQuery
+      )
+    `;
+
+    db.query(query, [userId, userId], (err, result) => {
+      if (err) {
+        return db.rollback(() => {
+          console.error('Error assigning tutor:', err);
+          res.status(500).json({ error: 'Assignment error' });
+        });
+      }
+
+      if (result.affectedRows === 0) {
+        return db.rollback(() => {
+          res.status(400).json({ error: 'No available tutor found for your course' });
+        });
+      }
+
+      db.commit((err) => {
+        if (err) {
+          return db.rollback(() => {
+            console.error('Error committing transaction:', err);
+            res.status(500).json({ error: 'Commit error' });
+          });
+        }
+        res.json({ message: 'Tutor assigned successfully' });
+      });
+    });
+  });
+});
+
+app.get('/api/tutor-problems/:userId', (req: Request, res: Response) => {
+  const userId = req.params.userId;
+  
+  db.beginTransaction((err) => {
+    if (err) {
+      console.error('Error starting transaction:', err);
+      return res.status(500).json({ error: 'Transaction error' });
+    }
+
+    const query = `
+      SELECT T.TutorId, T.Topic, COUNT(P.ProblemId) AS TotalProblems
+      FROM Tutor T
+      JOIN Courses C ON T.Topic = C.Topic
+      JOIN Problems P ON P.Topic = C.Topic
+      JOIN User U ON U.CourseId = C.CourseId
+      WHERE U.UserId = ?
+      GROUP BY T.TutorId, T.Topic
+      FOR UPDATE
+    `;
+
+    db.query(query, [userId], (err, results) => {
+      if (err) {
+        return db.rollback(() => {
+          console.error('Error in query:', err);
+          res.status(500).json({ error: 'Query error' });
+        });
+      }
+
+      db.commit((err) => {
+        if (err) {
+          return db.rollback(() => {
+            console.error('Error committing transaction:', err);
+            res.status(500).json({ error: 'Commit error' });
+          });
+        }
+        res.json({ tutorProblems: results });
+      });
+    });
+  });
+});
+
+app.post('/api/release-tutor', (req: Request, res: Response) => {
+  const userId = req.cookies.userId;
+
+  const query = `
+    UPDATE Tutor 
+    SET CurrentUserId = NULL
+    WHERE CurrentUserId = ?
+  `;
+
+  db.query(query, [userId], (err, result) => {
+    if (err) {
+      console.error('Error releasing tutor:', err);
+      res.status(500).json({ error: 'Release error' });
+    } else {
+      res.json({ message: 'Tutor released successfully' });
+    }
+  });
+});
+
+app.post('/api/lock-tutor-by-topic', (req: Request, res: Response) => {
+  const { topic, userId } = req.body;
+  
+  db.beginTransaction((err) => {
+    if (err) {
+      console.error('Error starting transaction:', err);
+      return res.status(500).json({ error: 'Transaction error' });
+    }
+
+    // Check and lock the tutor for this topic
+    const query = `
+      SELECT T.TutorId, T.Topic, T.IsAvailable
+      FROM Tutor T
+      WHERE T.Topic = ? AND T.IsAvailable = 1
+      FOR UPDATE
+    `;
+
+    db.query(query, [topic], (err, results) => {
+      if (err) {
+        return db.rollback(() => {
+          console.error('Error checking tutor:', err);
+          res.status(500).json({ error: 'Query error' });
+        });
+      }
+
+      if (results.length === 0) {
+        return db.rollback(() => {
+          res.status(400).json({ error: 'Tutor for this topic is not available' });
+        });
+      }
+
+      const tutor = results[0];
+      
+      // Lock the tutor
+      const updateQuery = `
+        UPDATE Tutor 
+        SET IsAvailable = 0, CurrentUserId = ?
+        WHERE Topic = ?
+      `;
+
+      db.query(updateQuery, [userId, topic], (err) => {
+        if (err) {
+          return db.rollback(() => {
+            console.error('Error locking tutor:', err);
+            res.status(500).json({ error: 'Update error' });
+          });
+        }
+
+        db.commit((err) => {
+          if (err) {
+            return db.rollback(() => {
+              console.error('Error committing transaction:', err);
+              res.status(500).json({ error: 'Commit error' });
+            });
+          }
+          res.json({ 
+            message: 'Tutor locked successfully',
+            tutor
+          });
+        });
+      });
+    });
+  });
+});
+
 app.listen(PORT, () => console.log(`Server running on port ${PORT}`));
 

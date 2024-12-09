@@ -106,3 +106,66 @@ BEGIN
     ORDER BY RAND()
     LIMIT 3;
 END
+
+Transaction:
+
+START TRANSACTION;
+// Assign the first available tutor to the user
+UPDATE Tutor
+SET CurrentUserId = ?
+WHERE TutorId = (
+    SELECT TutorId 
+    FROM (
+        SELECT T.TutorId
+        FROM Tutor T
+        JOIN Courses C ON T.Topic = C.Topic
+        JOIN User U ON U.CourseId = C.CourseId
+        WHERE U.UserId = ?
+        AND T.CurrentUserId IS NULL
+        LIMIT 1
+    ) AS SubQuery
+);
+
+COMMIT;
+
+ROLLBACK;
+
+
+START TRANSACTION;
+
+// Get tutor information and problem counts
+SELECT T.TutorId, T.Topic, COUNT(P.ProblemId) AS TotalProblems
+FROM Tutor T
+JOIN Courses C ON T.Topic = C.Topic
+JOIN Problems P ON P.Topic = C.Topic
+JOIN User U ON U.CourseId = C.CourseId
+WHERE U.UserId = ?
+GROUP BY T.TutorId, T.Topic
+FOR UPDATE;
+
+COMMIT;
+
+ROLLBACK;
+
+UPDATE Tutor
+SET CurrentUserId = NULL
+WHERE CurrentUserId = ?;
+
+
+START TRANSACTION;
+
+// Check if a tutor is available for the given topic
+SELECT T.TutorId, T.Topic, T.IsAvailable
+FROM Tutor T
+WHERE T.Topic = ?
+AND T.IsAvailable = 1
+FOR UPDATE;
+
+// Update tutor availability and assign user if available
+UPDATE Tutor
+SET IsAvailable = 0, CurrentUserId = ?
+WHERE Topic = ?;
+
+COMMIT;
+
+ROLLBACK;

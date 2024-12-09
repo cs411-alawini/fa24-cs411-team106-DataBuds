@@ -104,25 +104,51 @@
     
     document.getElementById('tutor-heading').textContent = `${topic} Tutor`;
     
-    function displayResources(resources) {
-      const resourcesList = document.getElementById('resources-list');
-      resourcesList.innerHTML = resources.map(resource => {
-        // Get first 30 characters of ResourceType and add ellipsis if longer
-        const shortTitle = resource.ResourceType.length > 30 
-          ? resource.ResourceType.substring(0, 30) + '...'
-          : resource.ResourceType;
+    async function assignTutor() {
+      try {
+        const response = await fetch('/api/assign-tutor', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' }
+        });
         
-        return `
-          <div class="resource-item">
-            <a href="${resource.WebURL}" target="_blank" title="${resource.ResourceType}">
-              ${shortTitle}
-            </a>
-          </div>
-        `;
-      }).join('');
+        if (!response.ok) {
+          throw new Error('Failed to assign tutor');
+        }
+        
+        const data = await response.json();
+        console.log('Tutor assigned:', data.message);
+        return true;
+      } catch (error) {
+        console.error('Error assigning tutor:', error);
+        return false;
+      }
     }
 
+    async function releaseTutor() {
+      try {
+        await fetch('/api/release-tutor', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' }
+        });
+      } catch (error) {
+        console.error('Error releasing tutor:', error);
+      }
+    }
+
+    window.addEventListener('beforeunload', () => {
+      releaseTutor();
+    });
+
     async function requestNewQuestion() {
+      const tutorAssigned = await assignTutor();
+      if (!tutorAssigned) {
+        const chatMessages = document.getElementById('chat-messages');
+        const errorMessage = document.createElement('p');
+        errorMessage.innerHTML = `<strong>Error:</strong> Unable to assign a tutor. Please try again later.`;
+        chatMessages.appendChild(errorMessage);
+        return;
+      }
+
       try {
         const response = await fetch('/api/chat/question', {
           method: 'POST',
