@@ -29,6 +29,9 @@ app.use(cookieParser());
 
 const genAI = new GoogleGenerativeAI(process.env.GEMINI_API_KEY || '');
 
+
+
+
 app.get('/login', (req: Request, res: Response) => {
   res.sendFile(path.join(__dirname, 'login.html'));
 });
@@ -40,7 +43,7 @@ app.get('/signup', (req: Request, res: Response) => {
 
 
 app.post('/api/login', (req: Request, res: Response) => {
-  const { username, password } = req.body;
+  const { username, password } = req.body; // read 
   const query = 'SELECT UserId FROM User WHERE username = ? AND password = ?';
   
   db.query(query, [username, password], (err, results) => {
@@ -74,7 +77,7 @@ app.post('/api/signup', (req: Request, res: Response) => {
       res.status(400).json({ message: 'Username already taken' });
     } else {
       
-      const insertQuery = 'INSERT INTO User (username, password) VALUES (?, ?)';
+      const insertQuery = 'INSERT INTO User (username, password) VALUES (?, ?)'; // create
       db.query(insertQuery, [username, password], (err) => {
         if (err) {
           console.error('Error inserting into the database:', err);
@@ -87,6 +90,57 @@ app.post('/api/signup', (req: Request, res: Response) => {
   });
 });
 
+app.post('/api/delete-user', (req: Request, res: Response) => {
+  const { username, password } = req.body;
+
+  const checkQuery = 'SELECT UserId FROM User WHERE username = ? AND password = ?';
+  
+  db.query(checkQuery, [username, password], (err, results) => {
+    if (err) {
+      console.error('Error querying the database:', err);
+      res.status(500).json({ error: 'Database error' });
+      return;
+    }
+
+    if (results.length > 0) {
+      const deleteQuery = 'DELETE FROM User WHERE username = ? AND password = ?'; // delete
+      
+      db.query(deleteQuery, [username, password], (err) => {
+        if (err) {
+          console.error('Error deleting user from database:', err);
+          res.status(500).json({ error: 'Database error' });
+        } else {
+          
+          res.clearCookie('userId');
+          res.redirect('/login');
+        }
+      });
+    } else {
+      res.status(401).json({ message: 'Invalid username or password' });
+    }
+  });
+});
+
+app.get('/api/search-courses', (req: Request, res: Response) => { // keyword search
+  const { keyword } = req.query;
+
+  if (!keyword) {
+    return ;
+  }
+
+  
+  const query = 'SELECT * FROM Courses WHERE Topic LIKE ?';
+  const searchKeyword = `%${keyword}%`;
+
+  db.query(query, [searchKeyword], (err, results) => {
+    if (err) {
+      console.error('Error searching for courses:', err);
+      res.status(500).json({ error: 'Database error' });
+    } else {
+      res.json({ courses: results });
+    }
+  });
+});
 
 app.get('/courses', (req: Request, res: Response) => {
   res.sendFile(path.join(__dirname, 'courses.html'));
@@ -107,6 +161,20 @@ app.get('/api/courses', (req: Request, res: Response) => {
 });
 
 
+app.get('/api/avg-difficulty', (req: Request, res: Response) => {
+  const query = 'CALL GetAvgDifficulty();'; // call  stored procedure
+
+  db.query(query, (err, results) => {
+    if (err) {
+      console.error('Error executing stored procedure:', err);
+      res.status(500).json({ error: 'Database error' });
+    } else {
+      const avgDifficultyData = results[0]; 
+      res.json({ avgDifficulty: avgDifficultyData });
+    }
+  });
+});
+
 app.post('/api/register-course', (req: Request, res: Response) => {
   const courseId = req.body.courseId;
   const userId = req.cookies.userId;
@@ -116,7 +184,7 @@ app.post('/api/register-course', (req: Request, res: Response) => {
     return;
   }
 
-  const updateUserQuery = 'UPDATE User SET CourseId = ? WHERE UserId = ?';
+  const updateUserQuery = 'UPDATE User SET CourseId = ? WHERE UserId = ?'; // update
   const getTopicQuery = 'SELECT Topic FROM Courses WHERE CourseId = ?';
 
   db.query(updateUserQuery, [courseId, userId], (err) => {
@@ -133,6 +201,21 @@ app.post('/api/register-course', (req: Request, res: Response) => {
           res.redirect(`/tutor?topic=${encodeURIComponent(topic)}`);
         }
       });
+    }
+  });
+});
+
+app.get('/api/course-enrollment-stats', (req: Request, res: Response) => {
+  const query = 'CALL CourseEnrollmentStatistics();'; // call stored procedure
+
+  db.query(query, (err, results) => {
+    if (err) {
+      console.error('Error executing stored procedure:', err);
+      res.status(500).json({ error: 'Database error' });
+    } else {
+      
+      const courseStats = results[0]; 
+      res.json({ courseStats });
     }
   });
 });
@@ -227,6 +310,7 @@ app.post('/api/chat', (req: Request, res: Response, next) => {
     }
   })();
 });
+
 
 async function updateUserProgress(
   userId: number, 
@@ -345,3 +429,4 @@ app.get('/api/resources/:topic', (req: Request, res: Response) => {
 });
 
 app.listen(PORT, () => console.log(`Server running on port ${PORT}`));
+
