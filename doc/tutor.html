@@ -9,17 +9,35 @@
       font-family: Arial, sans-serif;
       margin: 20px;
       padding: 0;
+      display: flex;
+      flex-direction: column;
+      max-width: 1200px;
+      margin: 0 auto;
     }
-    h1 {
-      color: #333;
+    .container {
+      display: flex;
+      gap: 20px;
+      margin-top: 20px;
+    }
+    .chat-container {
+      flex: 2;
+    }
+    .resources-container {
+      flex: 1;
+      border: 1px solid #ccc;
+      padding: 15px;
+      background-color: #f5f5f5;
+      border-radius: 5px;
+      max-height: 300px;
+      overflow-y: auto;
     }
     #chat-box {
       border: 1px solid #ccc;
       padding: 15px;
-      margin-top: 20px;
       height: 300px;
       overflow-y: scroll;
       background-color: #f9f9f9;
+      border-radius: 5px;
     }
     #chat-messages p {
       margin: 5px 0;
@@ -42,20 +60,43 @@
     button:hover {
       background-color: #0056b3;
     }
+    .resource-item {
+      margin: 10px 0;
+      padding: 10px;
+      background-color: white;
+      border-radius: 3px;
+      border: 1px solid #ddd;
+    }
+    .resource-item a {
+      color: #007BFF;
+      text-decoration: none;
+    }
+    .resource-item a:hover {
+      text-decoration: underline;
+    }
   </style>
 </head>
 <body>
   <h1 id="tutor-heading">Tutor</h1>
   <p>Welcome to your tutor session for the selected course.</p>
 
-  <div id="chat-box">
-    <div id="chat-messages"></div>
-  </div>
+  <div class="container">
+    <div class="chat-container">
+      <div id="chat-box">
+        <div id="chat-messages"></div>
+      </div>
 
-  <form id="chat-form">
-    <input type="text" id="message-input" placeholder="Type your answer..." required>
-    <button type="submit">Send</button>
-  </form>
+      <form id="chat-form">
+        <input type="text" id="message-input" placeholder="Type your answer..." required>
+        <button type="submit">Send</button>
+      </form>
+    </div>
+
+    <div class="resources-container">
+      <h3>Recommended Resources</h3>
+      <div id="resources-list"></div>
+    </div>
+  </div>
 
   <script>
     const urlParams = new URLSearchParams(window.location.search);
@@ -63,6 +104,24 @@
     
     document.getElementById('tutor-heading').textContent = `${topic} Tutor`;
     
+    function displayResources(resources) {
+      const resourcesList = document.getElementById('resources-list');
+      resourcesList.innerHTML = resources.map(resource => {
+        // Get first 30 characters of ResourceType and add ellipsis if longer
+        const shortTitle = resource.ResourceType.length > 30 
+          ? resource.ResourceType.substring(0, 30) + '...'
+          : resource.ResourceType;
+        
+        return `
+          <div class="resource-item">
+            <a href="${resource.WebURL}" target="_blank" title="${resource.ResourceType}">
+              ${shortTitle}
+            </a>
+          </div>
+        `;
+      }).join('');
+    }
+
     async function requestNewQuestion() {
       try {
         const response = await fetch('/api/chat/question', {
@@ -86,8 +145,6 @@
         chatMessages.appendChild(errorMessage);
       }
     }
-
-    requestNewQuestion();
 
     document.getElementById('chat-form').addEventListener('submit', async (event) => {
       event.preventDefault();
@@ -115,6 +172,11 @@
           <strong>Correct Answer:</strong> ${data.correctAnswer}`;
         chatMessages.appendChild(feedbackMessage);
 
+        // Display resources when receiving feedback
+        if (data.resources) {
+          displayResources(data.resources);
+        }
+
         setTimeout(() => {
           requestNewQuestion();
         }, 3000);
@@ -127,6 +189,8 @@
         chatMessages.appendChild(errorMessage);
       }
     });
+
+    requestNewQuestion();
   </script>
 </body>
 </html>

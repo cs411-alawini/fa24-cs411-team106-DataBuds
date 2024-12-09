@@ -84,3 +84,24 @@ CREATE TABLE Info (
     WebURL varchar(250),
     ResourceType varchar(50)
 );
+
+
+Triggers:
+
+BEGIN
+    UPDATE Problems
+    SET Difficulty = 
+        CASE 
+            WHEN NEW.CorrectAnswers > OLD.CorrectAnswers 
+                THEN GREATEST(Difficulty - 1, 1)
+            ELSE LEAST(Difficulty + 1, 10)
+        END
+    WHERE Question = NEW.LastQuestion;  
+END
+
+BEGIN
+    UPDATE Info
+    SET RecommendationCount = RecommendationCount + 1
+    ORDER BY RAND()
+    LIMIT 3;
+END

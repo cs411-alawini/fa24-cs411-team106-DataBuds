@@ -230,7 +230,7 @@ app.post('/api/chat/question', (req: Request, res: Response) => {
   const { topic } = req.body;
   
   const query = `
-    SELECT Question, Answer 
+    SELECT Question, Answer, Difficulty 
     FROM Problems 
     WHERE Topic = ? 
     ORDER BY RAND() 
@@ -242,8 +242,19 @@ app.post('/api/chat/question', (req: Request, res: Response) => {
       console.error('Error querying Problems table:', err);
       res.status(500).json({ error: 'Database error' });
     } else if (results.length > 0) {
+      res.cookie('currentTopic', topic, { 
+        secure: process.env.NODE_ENV === 'production',
+        sameSite: 'strict'
+      });
+      res.cookie('currentAnswer', results[0].Answer, { 
+        secure: process.env.NODE_ENV === 'production',
+        sameSite: 'strict'
+      });
+      res.cookie('currentQuestion', results[0].Question, {
+        secure: process.env.NODE_ENV === 'production',
+        sameSite: 'strict'
+      });
       
-      res.cookie('currentAnswer', results[0].Answer);
       res.json({ 
         question: results[0].Question,
         context: `You are learning about ${topic}. Please answer the following question:`
@@ -260,77 +271,142 @@ app.post('/api/chat', (req: Request, res: Response, next) => {
     try {
       const { userAnswer } = req.body;
       const correctAnswer = req.cookies.currentAnswer;
-
-      if (!correctAnswer) {
-        return res.status(400).json({ error: 'No active question found' });
-      }
-
-      const feedback = await generateFeedback(userAnswer, correctAnswer);
-      res.json({ feedback, correctAnswer });
-    } catch (error) {
-      next(error);
-    }
-  })();
-});
-
-app.post('/api/chat', (req: Request, res: Response, next) => {
-  (async () => {
-    try {
-      const { userAnswer } = req.body;
-      const correctAnswer = req.cookies.currentAnswer;
+      const topic = req.cookies.currentTopic;
       const userId = req.cookies.userId;
-      const courseId = req.cookies.courseId;  
 
-      if (!correctAnswer) {
-        return ;
+      if (!correctAnswer || !topic) {
+        console.error('Missing data in cookies:', req.cookies);
+        return res.status(400).json({ error: 'No active question or topic found' });
       }
 
-      const feedback = await generateFeedback(userAnswer, correctAnswer);
-
-     
-      const userMessageQuery = 'INSERT INTO ChatHistory (UserId, CourseId, Sender, Message) VALUES (?, ?, ?, ?)';
-      db.query(userMessageQuery, [userId, courseId, 'user', userAnswer], (err) => {
-        if (err) {
-          console.error('Error storing user message:', err);
+      // Get feedback and resources in parallel
+      const [feedback, resources] = await Promise.all([
+        generateAdaptiveFeedback(userAnswer, correctAnswer, userId, topic),
+        new Promise((resolve, reject) => {
+          const query = `
+            SELECT WebURL, ResourceType, RecommendationCount 
+            FROM Info 
+            WHERE Topic = ?
+            ORDER BY RAND()
+            LIMIT 3
+          `;
+          
+          db.query(query, [topic], (err, results) => {
+            if (err) {
+              reject(err);
+            } else {
+              resolve(results);
+            }
+          });
+        })
+      ]);
+      
+      if (userId) {
+        const isCorrect = userAnswer.toLowerCase().trim() === correctAnswer.toLowerCase().trim();
+        try {
+          await updateUserProgress(userId, topic, isCorrect, req.cookies.currentQuestion || '');
+        } catch (err) {
+          console.error('Error updating progress:', err);
         }
-      });
+      }
 
-     
-      const tutorMessageQuery = 'INSERT INTO ChatHistory (UserId, CourseId, Sender, Message) VALUES (?, ?, ?, ?)';
-      db.query(tutorMessageQuery, [userId, courseId, 'tutor', feedback], (err) => {
-        if (err) {
-          console.error('Error storing tutor message:', err);
-        }
+      res.json({ 
+        feedback,
+        correctAnswer,
+        resources,  // Include resources in response
+        success: true
       });
-
-      res.json({ feedback, correctAnswer });
     } catch (error) {
+      console.error('Chat error:', error);
       next(error);
     }
   })();
 });
 
+async function updateUserProgress(
+  userId: number, 
+  topic: string, 
+  isCorrect: boolean, 
+  currentQuestion: string
+): Promise<void> {
+  if (!topic) {
+    throw new Error('Topic is required for updating progress');
+  }
 
-async function generateFeedback(userAnswer: string, correctAnswer: string): Promise<string> {
-  const model = genAI.getGenerativeModel({ model: "gemini-pro" });
-  
-  const prompt = `
-    Compare the following student answer to the correct answer and provide constructive feedback:
-    
-    Student's Answer: "${userAnswer}"
-    Correct Answer: "${correctAnswer}"
-    
-    Provide feedback that:
-    1. Acknowledges what the student did well
-    2. Points out any misconceptions or errors
-    3. Explains the correct approach if needed
-    Keep the tone encouraging and constructive.
+  // First check if a record exists
+  const checkQuery = `
+    SELECT UserId, Topic 
+    FROM UserProgress 
+    WHERE UserId = ? AND Topic = ?
   `;
 
-  const result = await model.generateContent(prompt);
-  const response = await result.response;
-  return response.text();
+  const insertOrUpdateQuery = `
+    INSERT INTO UserProgress (UserId, Topic, LastQuestion, CorrectAnswers, TotalAttempts) 
+    VALUES (?, ?, ?, ?, 1)
+    ON DUPLICATE KEY UPDATE 
+    LastQuestion = ?,
+    CorrectAnswers = CorrectAnswers + ?,
+    TotalAttempts = TotalAttempts + 1
+  `;
+  
+  return new Promise((resolve, reject) => {
+    db.query(insertOrUpdateQuery, [
+      userId, 
+      topic, 
+      currentQuestion, 
+      isCorrect ? 1 : 0,  // initial CorrectAnswers
+      currentQuestion,     // LastQuestion for update
+      isCorrect ? 1 : 0   // increment to CorrectAnswers
+    ], (err) => {
+      if (err) reject(err);
+      else resolve();
+    });
+  });
 }
+
+async function generateAdaptiveFeedback(
+  userAnswer: string, 
+  correctAnswer: string, 
+  userId: number, 
+  topic: string
+): Promise<string> {
+  try {
+    const model = genAI.getGenerativeModel({ model: "gemini-pro" });
+    const prompt = `
+      Compare the student answer "${userAnswer}" to the correct answer "${correctAnswer}" 
+      for the topic ${topic}. Provide constructive feedback.
+    `;
+    const result = await model.generateContent(prompt);
+    const response = await result.response;
+    return response.text();
+  } catch (error) {
+    console.error('Gemini API Error:', error);
+    // Provide a fallback response when the API is unavailable
+    return `I'm currently having trouble providing detailed feedback.
+      Your answer: "${userAnswer}"
+      Correct answer: "${correctAnswer}"
+      Please compare these and try another question.`;
+  }
+}
+
+app.get('/api/resources/:topic', (req: Request, res: Response) => {
+  const topic = req.params.topic;
+  const query = `
+    SELECT WebURL, ResourceType, RecommendationCount 
+    FROM Info 
+    WHERE Topic = ?
+    ORDER BY RAND()
+    LIMIT 3`;
+  
+  db.query(query, [topic], (err, results) => {
+    if (err) {
+      console.error('Error fetching resources:', err);
+      res.status(500).json({ error: 'Database error' });
+    } else {
+      res.json({ resources: results });
+    }
+  });
+});
 
 app.listen(PORT, () => console.log(`Server running on port ${PORT}`));
 
