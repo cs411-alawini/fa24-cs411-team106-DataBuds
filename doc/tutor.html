@@ -42,6 +42,27 @@
     button:hover {
       background-color: #0056b3;
     }
+    #resources-box {
+      margin-top: 20px;
+      padding: 15px;
+      border: 1px solid #ddd;
+      border-radius: 5px;
+    }
+    
+    #resources-list {
+      list-style: none;
+      padding: 0;
+    }
+    
+    #resources-list li {
+      margin: 10px 0;
+    }
+    
+    .recommended {
+      background-color: #fff3cd;
+      padding: 5px;
+      border-radius: 3px;
+    }
   </style>
 </head>
 <body>
@@ -50,6 +71,11 @@
 
   <div id="chat-box">
     <div id="chat-messages"></div>
+  </div>
+
+  <div id="resources-box">
+    <h3>Study Resources</h3>
+    <ul id="resources-list"></ul>
   </div>
 
   <form id="chat-form">
@@ -87,6 +113,30 @@
       }
     }
 
+    async function loadResources() {
+      try {
+        const response = await fetch(`/api/resources/${encodeURIComponent(topic)}`);
+        const data = await response.json();
+        
+        const resourcesList = document.getElementById('resources-list');
+        resourcesList.innerHTML = ''; // Clear existing resources
+        
+        data.resources.forEach(resource => {
+          const li = document.createElement('li');
+          li.innerHTML = `
+            <a href="${resource.WebURL}" target="_blank">
+              ${resource.ResourceType} 
+              ${resource.RecommendationCount > 0 ? '⭐'.repeat(Math.min(3, Math.ceil(resource.RecommendationCount/10))) : ''}
+              ${resource.WebURL}
+            </a>
+          `;
+          resourcesList.appendChild(li);
+        });
+      } catch (error) {
+        console.error('Error loading resources:', error);
+      }
+    }
+
     requestNewQuestion();
 
     document.getElementById('chat-form').addEventListener('submit', async (event) => {
@@ -105,7 +155,10 @@
         const response = await fetch('/api/chat', {
           method: 'POST',
           headers: { 'Content-Type': 'application/json' },
-          body: JSON.stringify({ userAnswer })
+          body: JSON.stringify({ 
+            userAnswer,
+            topic: urlParams.get('topic')
+          })
         });
 
         const data = await response.json();
@@ -114,6 +167,10 @@
         feedbackMessage.innerHTML = `<strong>${topic} Tutor:</strong> ${data.feedback}<br><br>
           <strong>Correct Answer:</strong> ${data.correctAnswer}`;
         chatMessages.appendChild(feedbackMessage);
+
+        if (data.successRate < 70) {
+          loadResources();
+        }
 
         setTimeout(() => {
           requestNewQuestion();
